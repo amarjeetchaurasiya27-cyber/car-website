@@ -1,68 +1,48 @@
 pipeline {
     agent any
-
     environment {
         DOCKER_IMAGE = "amarjeet001/car-website"
         DOCKER_TAG   = "${env.BUILD_NUMBER}"
         DOCKER_HUB_ID = "dockerhub-creds"
-        K8S_CONFIG_ID = "k8s-config"
+        K8S_CONFIG_ID = "k8s-config" 
     }
-
     stages {
-        stage('Checkout') {
+        stage('Docker Build & Push') {
             steps {
-                git url: 'https://github.com/amarjeetchaurasiya27-cyber/car-website.git', branch: 'main'
-            }
-        }
-
-        stage('Docker Build') {
-            steps {
-                // 'sh' ko 'bat' mein badla gaya hai
                 bat "docker build -t %DOCKER_IMAGE%:%DOCKER_TAG% ."
-                bat "docker tag %DOCKER_IMAGE%:%DOCKER_TAG% %DOCKER_IMAGE%:latest"
-            }
-        }
-
-        stage('Push to DockerHub') {
-            steps {
-                script {
-                    withCredentials([usernamePassword(credentialsId: "${DOCKER_HUB_ID}", passwordVariable: 'PASS', usernameVariable: 'USER')]) {
-                        // Windows mein variables ko %VAR% se access karte hain
-                        bat "echo %PASS% | docker login -u %USER% --password-stdin"
-                        bat "docker push %DOCKER_IMAGE%:%DOCKER_TAG%"
-                        bat "docker push %DOCKER_IMAGE%:latest"
-                    }
+                withCredentials([usernamePassword(credentialsId: "${DOCKER_HUB_ID}", passwordVariable: 'PASS', usernameVariable: 'USER')]) {
+                    bat "echo %PASS% | docker login -u %USER% --password-stdin"
+                    bat "docker push %DOCKER_IMAGE%:%DOCKER_TAG%"
                 }
             }
         }
-
-       stage('Deploy to Kubernetes') {
+        stage('Automated K8s Cleanup') {
             steps {
                 script {
                     withKubeConfig([credentialsId: "${K8S_CONFIG_ID}"]) {
-                        echo "Automating Deployment for Build: ${DOCKER_TAG}"
-                        
-                        // 1. Deployment file mein image tag update karna (Automated)
-                        powershell "((Get-Content k8s/deployment.yaml) -replace 'amarjeet001/car-website:latest', '${DOCKER_IMAGE}:${DOCKER_TAG}') | Set-Content k8s/deployment.yaml"
-                        
-                        // 2. Fresh Apply
-                        bat "kubectl apply -f k8s/"
-                        
-                        // 3. Force Rollout (Ye sabse zaroori hai automation ke liye)
-                        // Isse Kubernetes pods ko kill karke fresh image pull karega hi karega
-                        bat "kubectl rollout restart deployment/car-website-deployment"
-                        
-                        echo "Automation Complete! Site updated to Build #${DOCKER_TAG}"
+                        // Purane kisi bhi conflict ko khatam karne ke liye
+                        // Ingress aur purane microservices ko automation se delete karna
+                        bat "kubectl delete ingress micro-app-ingress --ignore-not-found"
+                        bat "kubectl delete deployment backend frontend postgres-db --ignore-not-found"
                     }
                 }
             }
         }
-    }
-
-    post {
-        always {
-            bat "docker logout"
-            cleanWs()
+        stage('Force Deploy Car Website') {
+            steps {
+                script {
+                    withKubeConfig([credentialsId: "${K8S_CONFIG_ID}"]) {
+                        // Nayi image tag ko inject karna
+                        powershell "((Get-Content k8s/deployment.yaml) -replace 'amarjeet001/car-website:latest', '${DOCKER_IMAGE}:${DOCKER_TAG}') | Set-Content k8s/deployment.yaml"
+                        
+                        // Fresh Deployment
+                        bat "kubectl apply -f k8s/"
+                        
+                        // Rollout restart taaki pods 100% naye code ke sath chalein
+                        bat "kubectl rollout restart deployment car-website-deployment"
+                    }
+                }
+            }
         }
     }
 }
