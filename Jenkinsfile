@@ -40,15 +40,19 @@ pipeline {
             steps {
                 script {
                     withKubeConfig([credentialsId: "${K8S_CONFIG_ID}"]) {
-                        echo "Updating deployment with image tag: ${DOCKER_TAG}"
+                        echo "Automating Deployment for Build: ${DOCKER_TAG}"
                         
-                        // PowerShell command to update image tag inside deployment.yaml
+                        // 1. Deployment file mein image tag update karna (Automated)
                         powershell "((Get-Content k8s/deployment.yaml) -replace 'amarjeet001/car-website:latest', '${DOCKER_IMAGE}:${DOCKER_TAG}') | Set-Content k8s/deployment.yaml"
                         
-                        // Master Command: Poore k8s folder ko apply karna
+                        // 2. Fresh Apply
                         bat "kubectl apply -f k8s/"
                         
-                        echo "Deployment and Ingress applied successfully!"
+                        // 3. Force Rollout (Ye sabse zaroori hai automation ke liye)
+                        // Isse Kubernetes pods ko kill karke fresh image pull karega hi karega
+                        bat "kubectl rollout restart deployment/car-website-deployment"
+                        
+                        echo "Automation Complete! Site updated to Build #${DOCKER_TAG}"
                     }
                 }
             }
