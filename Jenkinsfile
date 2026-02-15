@@ -36,17 +36,19 @@ pipeline {
             }
         }
 
-        stage('Deploy to Kubernetes') {
+       stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    // Yahan aapko 'Kubernetes CLI' plugin chahiye hoga
                     withKubeConfig([credentialsId: "${K8S_CONFIG_ID}"]) {
                         echo "Updating deployment with image tag: ${DOCKER_TAG}"
-                        // Windows mein 'sed' nahi hota, isliye hum PowerShell use karenge replace ke liye
+                        
+                        // PowerShell command to update image tag inside deployment.yaml
                         powershell "((Get-Content k8s/deployment.yaml) -replace 'amarjeet001/car-website:latest', '${DOCKER_IMAGE}:${DOCKER_TAG}') | Set-Content k8s/deployment.yaml"
-                        bat "kubectl apply -f k8s/deployment.yaml"
-                        bat "kubectl apply -f k8s/service.yaml"
-                        bat "kubectl apply -f k8s/ingress.yaml"
+                        
+                        // Master Command: Poore k8s folder ko apply karna
+                        bat "kubectl apply -f k8s/"
+                        
+                        echo "Deployment and Ingress applied successfully!"
                     }
                 }
             }
