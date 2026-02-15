@@ -2,11 +2,10 @@ pipeline {
     agent any
 
     environment {
-        // Aapki details ke hisaab se configurations
         DOCKER_IMAGE = "amarjeet001/car-website"
         DOCKER_TAG   = "${env.BUILD_NUMBER}"
-        DOCKER_HUB_ID = "dockerhub-creds" // Jo aapne bataya
-        K8S_CONFIG_ID = "k8s-config"      // Jenkins mein kubeconfig ki ID
+        DOCKER_HUB_ID = "dockerhub-creds"
+        K8S_CONFIG_ID = "k8s-config"
     }
 
     stages {
@@ -16,18 +15,11 @@ pipeline {
             }
         }
 
-        stage('Code Analysis (SonarQube)') {
-            steps {
-                echo "Analyzing code quality..."
-                // Agar SonarQube setup hai toh yahan command aayegi, 
-                // nahi toh ise skip kar sakte hain.
-            }
-        }
-
         stage('Docker Build') {
             steps {
-                sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
-                sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
+                // 'sh' ko 'bat' mein badla gaya hai
+                bat "docker build -t %DOCKER_IMAGE%:%DOCKER_TAG% ."
+                bat "docker tag %DOCKER_IMAGE%:%DOCKER_TAG% %DOCKER_IMAGE%:latest"
             }
         }
 
@@ -35,9 +27,10 @@ pipeline {
             steps {
                 script {
                     withCredentials([usernamePassword(credentialsId: "${DOCKER_HUB_ID}", passwordVariable: 'PASS', usernameVariable: 'USER')]) {
-                        sh "echo \$PASS | docker login -u \$USER --password-stdin"
-                        sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
-                        sh "docker push ${DOCKER_IMAGE}:latest"
+                        // Windows mein variables ko %VAR% se access karte hain
+                        bat "echo %PASS% | docker login -u %USER% --password-stdin"
+                        bat "docker push %DOCKER_IMAGE%:%DOCKER_TAG%"
+                        bat "docker push %DOCKER_IMAGE%:latest"
                     }
                 }
             }
@@ -46,14 +39,14 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    // Jenkins se Minikube/K8s par deploy karne ke liye
+                    // Yahan aapko 'Kubernetes CLI' plugin chahiye hoga
                     withKubeConfig([credentialsId: "${K8S_CONFIG_ID}"]) {
                         echo "Updating deployment with image tag: ${DOCKER_TAG}"
-                        // Deployment YAML mein image version update karna
-                        sh "sed -i 's|amarjeet001/car-website:latest|${DOCKER_IMAGE}:${DOCKER_TAG}|g' k8s/deployment.yaml"
-                        sh "kubectl apply -f k8s/deployment.yaml"
-                        sh "kubectl apply -f k8s/service.yaml"
-                        sh "kubectl apply -f k8s/ingress.yaml"
+                        // Windows mein 'sed' nahi hota, isliye hum PowerShell use karenge replace ke liye
+                        powershell "((Get-Content k8s/deployment.yaml) -replace 'amarjeet001/car-website:latest', '${DOCKER_IMAGE}:${DOCKER_TAG}') | Set-Content k8s/deployment.yaml"
+                        bat "kubectl apply -f k8s/deployment.yaml"
+                        bat "kubectl apply -f k8s/service.yaml"
+                        bat "kubectl apply -f k8s/ingress.yaml"
                     }
                 }
             }
@@ -62,11 +55,8 @@ pipeline {
 
     post {
         always {
-            sh "docker logout"
+            bat "docker logout"
             cleanWs()
-        }
-        success {
-            echo "Bhai, Deployment Successful! Check at http://micro-app.local"
         }
     }
 }
