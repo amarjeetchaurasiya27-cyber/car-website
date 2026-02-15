@@ -28,18 +28,19 @@ pipeline {
                 }
             }
         }
-        stage('Force Deploy Car Website') {
+       stage('Force Clean & Deploy') {
             steps {
                 script {
                     withKubeConfig([credentialsId: "${K8S_CONFIG_ID}"]) {
-                        // Nayi image tag ko inject karna
-                        powershell "((Get-Content k8s/deployment.yaml) -replace 'amarjeet001/car-website:latest', '${DOCKER_IMAGE}:${DOCKER_TAG}') | Set-Content k8s/deployment.yaml"
+                        // 1. Purane kisi bhi Ingress ko jad se udao (Taaki naya raasta bane)
+                        bat "kubectl delete ingress --all --ignore-not-found"
                         
-                        // Fresh Deployment
+                        // 2. Nayi config apply karo
                         bat "kubectl apply -f k8s/"
                         
-                        // Rollout restart taaki pods 100% naye code ke sath chalein
-                        bat "kubectl rollout restart deployment car-website-deployment"
+                        // 3. Ingress Controller ko refresh karne ke liye ek dummy command
+                        echo "Waiting for Ingress to sync..."
+                        sleep 10 
                     }
                 }
             }
