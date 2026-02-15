@@ -6,6 +6,12 @@ metadata:
     app: car-website
 spec:
   replicas: 2
+  # RollingUpdate ensures zero downtime during new deployments
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: car-website
@@ -16,8 +22,9 @@ spec:
     spec:
       containers:
       - name: car-website-container
-        # Jenkinsfile ki sed command is 'latest' ko build number se replace kar degi
+        # Jenkins pipeline will replace ':latest' with ':${BUILD_NUMBER}'
         image: amarjeet001/car-website:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 80
         resources:
