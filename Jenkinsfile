@@ -37,19 +37,18 @@ pipeline {
                 }
             }
         }
-        stage('K8s Deployment') {
+       stage('K8s Deployment') {
             steps {
                 script {
+                    // Ye block ensure karega ki Jenkins sach mein cluster se connect ho
                     withKubeConfig([credentialsId: "${K8S_CONFIG_ID}"]) {
-                        echo "Deploying Build Version: ${env.BUILD_NUMBER}"
+                        // 1. Check if Jenkins can see the cluster
+                        bat "kubectl cluster-info" 
                         
-                        // Step 1: Purane conflicts saaf karna (Automation)
-                        bat "kubectl delete ingress --all --ignore-not-found"
+                        // 2. Force delete purana kachra (Ye commands execute honi chahiye)
+                        bat "kubectl delete deployment frontend backend postgres-db --ignore-not-found"
                         
-                        // Step 2: Deployment file mein image tag update karna
-                        powershell "(Get-Content k8s/deployment.yaml) -replace 'amarjeet001/car-website:latest', '${DOCKER_IMAGE}:${DOCKER_TAG}' | Set-Content k8s/deployment.yaml"
-                        
-                        // Step 3: Apply all manifests
+                        // 3. Apply New Car Website
                         bat "kubectl apply -f k8s/"
                         
                         // Step 4: Force rollout restart to ensure new image pull
